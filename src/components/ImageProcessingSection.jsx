@@ -5,8 +5,18 @@ const ImageProcessingSection = () => {
   const canvasRef = useRef(null);
   const [translatedText, setTranslatedText] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [toast, setToast] = useState({ show: false, message: '', type: 'danger' });
   const canvasWidth = window.innerWidth * 0.75;
   const canvasHeight = 900;
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast({ ...toast, show: false });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
 
   const drawImageOnCanvas = (image) => {
     const canvas = canvasRef.current;
@@ -55,32 +65,54 @@ const ImageProcessingSection = () => {
         formData.append('file', file);
 
         try {
-          const ocrResponse = await axios.post('https://api.cloudjourney.dev/readtext', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-
+          setToast({ show: true, message: 'Processing image...', type: 'info' });
+          const ocrResponse = await axios.post(
+            'https://cloudjourneygateway.azure-api.net/api/ReadText', 
+            formData, 
+            {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              }
+            }
+          );
+          
           if (ocrResponse.data.recognizedText) {
             drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
             
-            const textChunks = ocrResponse.data.recognizedText.map(item => ({
-              text: item.text
-            }));
+            const textChunks = ocrResponse.data.recognizedText.map(item => item.text);
 
-            const translationResponse = await axios.post('https://api.cloudjourney.dev/translate', {
-              targetLanguage: selectedLanguage,
-              text_chunks: textChunks
-            });
+            setToast({ show: true, message: 'Translating text...', type: 'info' });
+            const translationResponse = await axios.post(
+              'https://cloudjourneygateway.azure-api.net/api/Translate',
+              {
+                targetLanguage: selectedLanguage,
+                textChunks: textChunks
+              },
+              {
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
 
             if (translationResponse.data.translations) {
               const translatedTexts = translationResponse.data.translations
                 .map(t => t.translatedText)
                 .join('\n');
               setTranslatedText(translatedTexts);
+              setToast({ show: true, message: 'Translation completed successfully!', type: 'success' });
             }
+          } else {
+            setToast({ show: true, message: 'No text was found in the image', type: 'warning' });
           }
         } catch (error) {
           console.error('Error processing image:', error);
-          setTranslatedText('Error processing image. Please try again.');
+          setTranslatedText('');
+          setToast({ 
+            show: true, 
+            message: 'Error: ' + (error.response?.data?.message || 'Failed to process the image'),
+            type: 'danger'
+          });
         }
       };
     };
@@ -90,6 +122,29 @@ const ImageProcessingSection = () => {
 
   return (
     <div className="container my-4">
+      {/* Toast notification */}
+      <div className="position-fixed top-0 start-50 translate-middle-x pt-3" style={{ zIndex: 1050 }}>
+        <div 
+          className={`toast ${toast.show ? 'show' : ''}`} 
+          role="alert" 
+          aria-live="assertive" 
+          aria-atomic="true"
+          style={{ minWidth: '300px' }}
+        >
+          <div className={`toast-header bg-${toast.type} text-white`}>
+            <strong className="me-auto">Message</strong>
+            <button 
+              type="button" 
+              className="btn-close btn-close-white" 
+              onClick={() => setToast({ ...toast, show: false })}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
+        </div>
+      </div>
+
       <div className="row">
         <div className="col-md-9">
           <canvas
@@ -100,7 +155,9 @@ const ImageProcessingSection = () => {
           />
         </div>
         <div className="col-md-3">
+          <label htmlFor="languageSelect" className="form-label">Language Destination</label>
           <select
+            id="languageSelect"
             className="form-select mb-3"
             value={selectedLanguage}
             onChange={(e) => setSelectedLanguage(e.target.value)}
@@ -109,11 +166,15 @@ const ImageProcessingSection = () => {
             <option value="es">Spanish</option>
             <option value="fr">French</option>
           </select>
+          
+          <label htmlFor="translatedTextArea" className="form-label">Translated Text</label>
           <textarea
+            id="translatedTextArea"
             className="form-control mb-3"
             rows="10"
             value={translatedText}
             readOnly
+            disabled
           />
           <div className="text-center">
             <label className="btn btn-primary">

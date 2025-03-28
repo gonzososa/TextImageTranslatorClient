@@ -18,21 +18,18 @@ We are building a single page application to translate text found within images 
 The whole process to extract and translate text is as follows:
 
 - when user upload an image file it is draw into the canvas regarding canvas proportion, that's it 75% percent width and 500px height, scale image if needed.
-- the image is read as binary and send to OCR endpoint https://api.cloudjourney.dev/readtext as form-encoded-url with field "file" containing the binary data.
+- the image is read as binary and send to OCR endpoint https://cloudjourneygateway.azure-api.net/api/ReadText as form-encoded-url with field "file" containing the binary data.
 - that service responds with a json object with the coordinates of text found within the image, if any. There may be various portions of text separated if text found is splitted in lines, if so, each portion should be concatenated to send them to translatator service.
 - on the image a rectangle have to be drawn using coordinates of each portion of text, if any.
-- all portions of text, contatenated, have to be send to translator service https://api.cloudjourney.dev/translate with a payload structure as follows
+- all portions of text, contatenated, have to be send to translator service https://cloudjourneygateway.azure-api.net/api/Translate with a payload structure as follows
     
     {
         "targetLanguage":"en",
-        "text_chunks": 
+        "textChunks": 
         [
-            {
-                "text": "string"  
-            },
-            {
-                "text": "string"  
-            }
+            "text",
+            "text",
+            "text",
         ]
     }'
 
