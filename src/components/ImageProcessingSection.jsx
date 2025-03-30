@@ -39,13 +39,32 @@ const ImageProcessingSection = () => {
   const drawTextBoxes = (recognizedText, imageMetadata) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+    
+    // Set rectangle style
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 2;
 
     recognizedText.forEach(({ polygon }) => {
-      const x = polygon.x * imageMetadata.scale + imageMetadata.offsetX;
-      const y = polygon.y * imageMetadata.scale + imageMetadata.offsetY;
-      ctx.strokeRect(x - 5, y - 5, 10, 10);
+      // Begin a new path for each text box
+      ctx.beginPath();
+      
+      // Move to the first point
+      const startX = polygon[0].x * imageMetadata.scale + imageMetadata.offsetX;
+      const startY = polygon[0].y * imageMetadata.scale + imageMetadata.offsetY;
+      ctx.moveTo(startX, startY);
+      
+      // Draw lines to each subsequent point
+      for (let i = 1; i < polygon.length; i++) {
+        const x = polygon[i].x * imageMetadata.scale + imageMetadata.offsetX;
+        const y = polygon[i].y * imageMetadata.scale + imageMetadata.offsetY;
+        ctx.lineTo(x, y);
+      }
+      
+      // Close the path back to the start point
+      ctx.lineTo(startX, startY);
+      
+      // Stroke the path to draw the polygon
+      ctx.stroke();
     });
   };
 
