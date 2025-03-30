@@ -1,8 +1,8 @@
 We are building a single page application to translate text found within images using Azure AI Vision and Azure Translator Services. This application (one page) is composed by this elements:
 
 - a header with a menu with options: 
-    - One
-    - two
+    - Github (add a github icon)
+    - About
     this menu has to be responsive
 
 - a section compose by these elements

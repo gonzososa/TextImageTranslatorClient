@@ -1,5 +1,19 @@
 import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import axios from 'axios';
+import { 
+  Box, 
+  Paper, 
+  Select, 
+  MenuItem, 
+  TextField, 
+  Button, 
+  Alert, 
+  Snackbar,
+  FormControl,
+  InputLabel,
+  Typography
+} from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 const ImageProcessingSection = forwardRef((props, ref) => {
   const canvasRef = useRef(null);
@@ -176,75 +190,116 @@ const ImageProcessingSection = forwardRef((props, ref) => {
   };
 
   return (
-    <div className="container my-4">
-      {/* Toast notification */}
-      <div className="position-fixed top-0 start-50 translate-middle-x pt-3" style={{ zIndex: 1050 }}>
-        <div 
-          className={`toast ${toast.show ? 'show' : ''}`} 
-          role="alert" 
-          aria-live="assertive" 
-          aria-atomic="true"
-          style={{ minWidth: '300px' }}
+    <Box sx={{ p: 3 }}>
+      {/* Modern Snackbar instead of Bootstrap Toast */}
+      <Snackbar
+        open={toast.show}
+        autoHideDuration={5000}
+        onClose={() => setToast({ ...toast, show: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setToast({ ...toast, show: false })} 
+          severity={toast.type === 'success' ? 'success' : 
+                   toast.type === 'info' ? 'info' : 
+                   toast.type === 'warning' ? 'warning' : 'error'}
+          sx={{ width: '100%' }}
         >
-          <div className={`toast-header bg-${toast.type} text-white`}>
-            <strong className="me-auto">Message</strong>
-            <button 
-              type="button" 
-              className="btn-close btn-close-white" 
-              onClick={() => setToast({ ...toast, show: false })}
-            ></button>
-          </div>
-          <div className="toast-body">
-            {toast.message}
-          </div>
-        </div>
-      </div>
+          {toast.message}
+        </Alert>
+      </Snackbar>
 
-      <div className="row">
-        <div className="col-md-9">
+      <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            flex: '1 1 70%',
+            minWidth: '300px',
+            p: 2,
+            borderRadius: 2,
+            background: '#ffffff',
+          }}
+        >
           <canvas
             ref={canvasRef}
             width={canvasWidth}
             height={canvasHeight}
-            className="border"
+            style={{
+              width: '100%',
+              height: 'auto',
+              borderRadius: '8px',
+              backgroundColor: '#f8f9fa'
+            }}
           />
-        </div>
-        <div className="col-md-3">
-          <label htmlFor="languageSelect" className="form-label">Language Destination</label>
-          <select
-            id="languageSelect"
-            className="form-select mb-3"
-            value={selectedLanguage}
-            onChange={(e) => setSelectedLanguage(e.target.value)}
-          >
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-          </select>
-          
-          <label htmlFor="translatedTextArea" className="form-label">Translated Text</label>
-          <textarea
-            id="translatedTextArea"
-            className="form-control mb-3"
-            rows="10"
+        </Paper>
+
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            flex: '1 1 25%',
+            minWidth: '250px',
+            p: 3,
+            borderRadius: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2
+          }}
+        >
+          <FormControl fullWidth>
+            <InputLabel id="language-select-label">Target Language</InputLabel>
+            <Select
+              labelId="language-select-label"
+              value={selectedLanguage}
+              label="Target Language"
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              sx={{ mb: 2 }}
+            >
+              <MenuItem value="en">English</MenuItem>
+              <MenuItem value="es">Spanish</MenuItem>
+              <MenuItem value="fr">French</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            multiline
+            rows={8}
             value={translatedText}
-            readOnly
             disabled
+            label="Translated Text"
+            sx={{
+              backgroundColor: '#f8f9fa',
+              '& .MuiInputBase-input.Mui-disabled': {
+                WebkitTextFillColor: '#000000',
+                opacity: 0.7,
+              }
+            }}
           />
-          <div className="text-center">
-            <label className="btn btn-primary">
-              Submit Image
-              <input
-                type="file"
-                hidden
-                accept=".jpeg,.jpg,.png,.bmp,.svg"
-                onChange={handleImageUpload}
-              />
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
+
+          <Button
+            variant="contained"
+            component="label"
+            startIcon={<CloudUploadIcon />}
+            sx={{
+              mt: 2,
+              background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #1976D2 30%, #1CA7F3 90%)',
+              }
+            }}
+          >
+            Submit Image
+            <input
+              type="file"
+              hidden
+              accept=".jpeg,.jpg,.png,.bmp,.svg"
+              onChange={handleImageUpload}
+            />
+          </Button>
+        </Paper>
+      </Box>
+    </Box>
   );
 });
 
