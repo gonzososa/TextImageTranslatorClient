@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import './App.css';
 import Header from './components/Header';
 import ImageUploadSection from './components/ImageUploadSection';
@@ -8,10 +8,42 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
 function App() {
+  const imageProcessingSectionRef = useRef();
+
   const handleTranslateFromUrl = async (url) => {
-    // Here we would handle URL-based translation
-    // This could be implemented in a future iteration
-    console.log('Translating from URL:', url);
+    try {
+      const response = await fetch(url);
+      
+      // Check if the response is ok and is an image
+      if (!response.ok) {
+        throw new Error('Failed to fetch image');
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType.startsWith('image/')) {
+        throw new Error('URL does not point to a valid image');
+      }
+      
+      // Convert the response to a blob
+      const blob = await response.blob();
+      
+      // Create a File object from the blob
+      const file = new File([blob], 'image-from-url', { type: contentType });
+      
+      // Process the image using the ImageProcessingSection's functionality
+      if (imageProcessingSectionRef.current) {
+        imageProcessingSectionRef.current.processImage(file);
+      }
+    } catch (error) {
+      console.error('Error processing URL:', error);
+      if (imageProcessingSectionRef.current) {
+        imageProcessingSectionRef.current.showToast({
+          show: true,
+          message: `Error: ${error.message}`,
+          type: 'danger'
+        });
+      }
+    }
   };
 
   return (
@@ -19,7 +51,7 @@ function App() {
       <Header />
       <main className="flex-grow-1">
         <ImageUploadSection onTranslateFromUrl={handleTranslateFromUrl} />
-        <ImageProcessingSection />
+        <ImageProcessingSection ref={imageProcessingSectionRef} />
       </main>
       <Footer />
     </div>

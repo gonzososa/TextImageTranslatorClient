@@ -35,6 +35,10 @@ The whole process to extract and translate text is as follows:
 
 - translator service responds with a json object that includes a fields that contains translated text that have to be put onto textarea component.
 
+- when user put an url on url text box and the button "Translate Image from URL" it is expected that the app make a request to download the resource, validate if its mime type match to a supported format image file. If so, start all the process as if image were uploaded by the user. If the resource doesn't match to a supported format, show a message to the user pointing it.
+
+- when user change the language selection and exists an image drawn on canvas resend it but taking into account the new language selected.
+
 Application have to be responsive to adapt its content to different screen sizes. Use bootstrap as CSS framework. Install any dependency needed.
 
 As a pair programming tools you task is to generate components needed to accomplish this task. Ask for when not sure what to do.

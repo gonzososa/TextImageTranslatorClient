@@ -1,11 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import axios from 'axios';
 
-const ImageProcessingSection = () => {
+const ImageProcessingSection = forwardRef((props, ref) => {
   const canvasRef = useRef(null);
   const [translatedText, setTranslatedText] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [toast, setToast] = useState({ show: false, message: '', type: 'danger' });
+  const [lastOcrResult, setLastOcrResult] = useState(null);
+  const [lastImageMetadata, setLastImageMetadata] = useState(null);
   const canvasWidth = window.innerWidth * 0.75;
   const canvasHeight = 900;
 
@@ -17,6 +19,19 @@ const ImageProcessingSection = () => {
       return () => clearTimeout(timer);
     }
   }, [toast.show]);
+
+  // Effect to handle language changes
+  useEffect(() => {
+    if (lastOcrResult && lastImageMetadata) {
+      handleTranslation(lastOcrResult, lastImageMetadata);
+    }
+  }, [selectedLanguage]);
+
+  // Expose methods through ref
+  useImperativeHandle(ref, () => ({
+    processImage: (file) => handleImageUpload({ target: { files: [file] } }),
+    showToast: (toastConfig) => setToast(toastConfig)
+  }));
 
   const drawImageOnCanvas = (image) => {
     const canvas = canvasRef.current;
@@ -68,6 +83,42 @@ const ImageProcessingSection = () => {
     });
   };
 
+  const handleTranslation = async (ocrResult, imageMetadata) => {
+    try {
+      setToast({ show: true, message: 'Translating text...', type: 'info' });
+      const textChunks = ocrResult.recognizedText.map(item => item.text);
+
+      const translationResponse = await axios.post(
+        'https://cloudjourneygateway.azure-api.net/api/Translate',
+        {
+          targetLanguage: selectedLanguage,
+          textChunks: textChunks
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (translationResponse.data.translations) {
+        const translatedTexts = translationResponse.data.translations
+          .map(t => t.translatedText)
+          .join('\n');
+        setTranslatedText(translatedTexts);
+        setToast({ show: true, message: 'Translation completed successfully!', type: 'success' });
+      }
+    } catch (error) {
+      console.error('Error translating text:', error);
+      setTranslatedText('');
+      setToast({ 
+        show: true, 
+        message: 'Error: ' + (error.response?.data?.message || 'Failed to translate the text'),
+        type: 'danger'
+      });
+    }
+  };
+
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -98,35 +149,20 @@ const ImageProcessingSection = () => {
           if (ocrResponse.data.recognizedText) {
             drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
             
-            const textChunks = ocrResponse.data.recognizedText.map(item => item.text);
-
-            setToast({ show: true, message: 'Translating text...', type: 'info' });
-            const translationResponse = await axios.post(
-              'https://cloudjourneygateway.azure-api.net/api/Translate',
-              {
-                targetLanguage: selectedLanguage,
-                textChunks: textChunks
-              },
-              {
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              }
-            );
-
-            if (translationResponse.data.translations) {
-              const translatedTexts = translationResponse.data.translations
-                .map(t => t.translatedText)
-                .join('\n');
-              setTranslatedText(translatedTexts);
-              setToast({ show: true, message: 'Translation completed successfully!', type: 'success' });
-            }
+            // Store the OCR result and image metadata for language changes
+            setLastOcrResult(ocrResponse.data);
+            setLastImageMetadata(imageMetadata);
+            
+            // Handle translation
+            await handleTranslation(ocrResponse.data, imageMetadata);
           } else {
             setToast({ show: true, message: 'No text was found in the image', type: 'warning' });
           }
         } catch (error) {
           console.error('Error processing image:', error);
           setTranslatedText('');
+          setLastOcrResult(null);
+          setLastImageMetadata(null);
           setToast({ 
             show: true, 
             message: 'Error: ' + (error.response?.data?.message || 'Failed to process the image'),
@@ -210,6 +246,8 @@ const ImageProcessingSection = () => {
       </div>
     </div>
   );
-};
+});
+
+ImageProcessingSection.displayName = 'ImageProcessingSection';
 
 export default ImageProcessingSection;
