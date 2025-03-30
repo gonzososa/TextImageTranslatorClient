@@ -14,6 +14,7 @@ import {
   Typography
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { validateFile } from '../utils/securityUtils';
 
 const ImageProcessingSection = forwardRef((props, ref) => {
   const canvasRef = useRef(null);
@@ -137,56 +138,85 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    const image = new Image();
-    const reader = new FileReader();
+    try {
+      // Validate file before processing
+      await validateFile(file);
+      
+      const image = new Image();
+      const reader = new FileReader();
 
-    reader.onload = async (e) => {
-      image.src = e.target.result;
-      image.onload = async () => {
-        const imageMetadata = drawImageOnCanvas(image);
-        
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-          setToast({ show: true, message: 'Processing image...', type: 'info' });
-          const ocrResponse = await axios.post(
-            'https://cloudjourneygateway.azure-api.net/api/ReadText', 
-            formData, 
-            {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              }
-            }
-          );
+      reader.onload = async (e) => {
+        image.src = e.target.result;
+        image.onload = async () => {
+          const imageMetadata = drawImageOnCanvas(image);
           
-          if (ocrResponse.data.recognizedText) {
-            drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
+          const formData = new FormData();
+          formData.append('file', file);
+
+          try {
+            setToast({ show: true, message: 'Processing image...', type: 'info' });
+            const ocrResponse = await axios.post(
+              'https://cloudjourneygateway.azure-api.net/api/ReadText', 
+              formData, 
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                },
+                timeout: 30000, // 30 second timeout
+                maxContentLength: 5 * 1024 * 1024, // 5MB max
+                maxBodyLength: 5 * 1024 * 1024
+              }
+            );
             
-            // Store the OCR result and image metadata for language changes
-            setLastOcrResult(ocrResponse.data);
-            setLastImageMetadata(imageMetadata);
-            
-            // Handle translation
-            await handleTranslation(ocrResponse.data, imageMetadata);
-          } else {
-            setToast({ show: true, message: 'No text was found in the image', type: 'warning' });
+            if (ocrResponse.data.recognizedText) {
+              drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
+              
+              setLastOcrResult(ocrResponse.data);
+              setLastImageMetadata(imageMetadata);
+              
+              await handleTranslation(ocrResponse.data, imageMetadata);
+            } else {
+              setToast({ show: true, message: 'No text was found in the image', type: 'warning' });
+            }
+          } catch (error) {
+            console.error('Error processing image:', error);
+            setTranslatedText('');
+            setLastOcrResult(null);
+            setLastImageMetadata(null);
+            setToast({ 
+              show: true, 
+              message: 'Error: ' + (error.response?.data?.message || 'Failed to process the image'),
+              type: 'error'
+            });
           }
-        } catch (error) {
-          console.error('Error processing image:', error);
-          setTranslatedText('');
-          setLastOcrResult(null);
-          setLastImageMetadata(null);
+        };
+
+        // Add error handling for image loading
+        image.onerror = () => {
           setToast({ 
             show: true, 
-            message: 'Error: ' + (error.response?.data?.message || 'Failed to process the image'),
-            type: 'danger'
+            message: 'Error: Failed to load the image',
+            type: 'error'
           });
-        }
+        };
       };
-    };
 
-    reader.readAsDataURL(file);
+      reader.onerror = () => {
+        setToast({ 
+          show: true, 
+          message: 'Error: Failed to read the file',
+          type: 'error'
+        });
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      setToast({ 
+        show: true, 
+        message: error.message,
+        type: 'error'
+      });
+    }
   };
 
   return (

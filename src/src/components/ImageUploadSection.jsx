@@ -1,14 +1,28 @@
 import React, { useState } from 'react';
-import { Paper, InputBase, IconButton, Box } from '@mui/material';
+import { Paper, InputBase, IconButton, Box, Alert, Snackbar } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import LinkIcon from '@mui/icons-material/Link';
+import { validateImageUrl } from '../utils/securityUtils';
 
 const ImageUploadSection = ({ onTranslateFromUrl }) => {
   const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState('');
 
-  const handleTranslate = () => {
+  const handleTranslate = async () => {
     if (imageUrl) {
-      onTranslateFromUrl(imageUrl);
+      try {
+        await validateImageUrl(imageUrl);
+        onTranslateFromUrl(imageUrl);
+        setError('');
+      } catch (err) {
+        setError(err.message);
+      }
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleTranslate();
     }
   };
 
@@ -36,6 +50,11 @@ const ImageUploadSection = ({ onTranslateFromUrl }) => {
           placeholder="Paste image URL here"
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
+          onKeyPress={handleKeyPress}
+          inputProps={{
+            'aria-label': 'paste image url',
+            maxLength: 2048 // Prevent extremely long URLs
+          }}
         />
         <IconButton 
           sx={{ 
@@ -54,6 +73,17 @@ const ImageUploadSection = ({ onTranslateFromUrl }) => {
           <SearchIcon />
         </IconButton>
       </Paper>
+
+      <Snackbar 
+        open={!!error} 
+        autoHideDuration={6000} 
+        onClose={() => setError('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
