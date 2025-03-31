@@ -49,7 +49,6 @@ function App() {
     try {
       const response = await fetch(url);
       
-      // Check if the response is ok and is an image
       if (!response.ok) {
         throw new Error('Failed to fetch image');
       }
@@ -59,13 +58,10 @@ function App() {
         throw new Error('URL does not point to a valid image');
       }
       
-      // Convert the response to a blob
       const blob = await response.blob();
       
-      // Create a File object from the blob
       const file = new File([blob], 'image-from-url', { type: contentType });
       
-      // Process the image using the ImageProcessingSection's functionality
       if (imageProcessingSectionRef.current) {
         imageProcessingSectionRef.current.processImage(file);
       }

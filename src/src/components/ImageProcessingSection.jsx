@@ -36,14 +36,12 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     }
   }, [toast.show]);
 
-  // Effect to handle language changes
   useEffect(() => {
     if (lastOcrResult && lastImageMetadata) {
       handleTranslation(lastOcrResult, lastImageMetadata);
     }
   }, [selectedLanguage]);
 
-  // Expose methods through ref
   useImperativeHandle(ref, () => ({
     processImage: (file) => handleImageUpload({ target: { files: [file] } }),
     showToast: (toastConfig) => setToast(toastConfig)
@@ -133,7 +131,6 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     if (!file) return;
 
     try {
-      // Validate file before processing
       await validateFile(file);
       
       const image = new Image();
@@ -174,7 +171,6 @@ const ImageProcessingSection = forwardRef((props, ref) => {
           }
         };
 
-        // Add error handling for image loading
         image.onerror = () => {
           setToast({ 
             show: true, 
@@ -204,7 +200,7 @@ const ImageProcessingSection = forwardRef((props, ref) => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Modern Snackbar instead of Bootstrap Toast */}
+      {}
       <Snackbar
         open={toast.show}
         autoHideDuration={5000}
