@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { validateFile } from '../utils/securityUtils';
+import { ApiService } from '../services/api';
 
 const ImageProcessingSection = forwardRef((props, ref) => {
   const canvasRef = useRef(null);
@@ -103,18 +104,11 @@ const ImageProcessingSection = forwardRef((props, ref) => {
       setToast({ show: true, message: 'Translating text...', type: 'info' });
       const textChunks = ocrResult.recognizedText.map(item => item.text);
 
-      const translationResponse = await axios.post(
-        'https://cloudjourneygateway.azure-api.net/api/Translate',
-        {
-          targetLanguage: selectedLanguage,
-          textChunks: textChunks
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const translationResponse = await ApiService.translateText (
+      {
+        textChunks: textChunks,
+        targetLanguage: selectedLanguage
+      });
 
       if (translationResponse.data.translations) {
         const translatedTexts = translationResponse.data.translations
@@ -155,18 +149,7 @@ const ImageProcessingSection = forwardRef((props, ref) => {
 
           try {
             setToast({ show: true, message: 'Processing image...', type: 'info' });
-            const ocrResponse = await axios.post(
-              'https://cloudjourneygateway.azure-api.net/api/ReadText', 
-              formData, 
-              {
-                headers: {
-                  'Content-Type': 'multipart/form-data',
-                },
-                timeout: 30000, // 30 second timeout
-                maxContentLength: 5 * 1024 * 1024, // 5MB max
-                maxBodyLength: 5 * 1024 * 1024
-              }
-            );
+            const ocrResponse = await ApiService.processImage(formData);
             
             if (ocrResponse.data.recognizedText) {
               drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
