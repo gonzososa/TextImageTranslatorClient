@@ -5,6 +5,7 @@ import Header from './components/Header';
 import ImageUploadSection from './components/ImageUploadSection';
 import ImageProcessingSection from './components/ImageProcessingSection';
 import Footer from './components/Footer';
+import { ALLOWED_MIME_TYPES } from './utils/securityUtils';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
@@ -53,9 +54,12 @@ function App() {
         throw new Error('Failed to fetch image');
       }
       
-      const contentType = response.headers.get('content-type');
-      if (!contentType.startsWith('image/')) {
-        throw new Error('URL does not point to a valid image');
+      const contentType = response.headers.get('content-type')
+        ?.split(';', 1)[0]
+        .trim()
+        .toLowerCase();
+      if (!ALLOWED_MIME_TYPES.includes(contentType)) {
+        throw new Error('URL does not point to a supported JPEG or PNG image');
       }
       
       const blob = await response.blob();

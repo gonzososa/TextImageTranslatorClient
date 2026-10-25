@@ -1,9 +1,7 @@
-export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+export const MAX_FILE_SIZE = 12 * 1024 * 1024;
 export const ALLOWED_MIME_TYPES = [
   'image/jpeg',
-  'image/png',
-  'image/bmp',
-  'image/svg+xml'
+  'image/png'
 ];
 
 export const validateFile = async (file) => {
@@ -13,7 +11,7 @@ export const validateFile = async (file) => {
 
   // Check file size
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+    throw new Error(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024} MiB limit`);
   }
 
   // Validate MIME type
@@ -22,28 +20,27 @@ export const validateFile = async (file) => {
     throw new Error('Invalid file type. Only JPEG, PNG, BMP and SVG files are allowed.');
   }
 
-  // Additional validation for SVG files to prevent XSS
-  if (file.type === 'image/svg+xml') {
-    return validateSVG(file);
-  }
-
   return true;
 };
 
 const validateMimeType = async (file) => {
-  // Check both the file extension and actual file signature
-  const fileExtension = file.name.toLowerCase().split('.').pop();
-  const validExtensions = ['jpg', 'jpeg', 'png', 'bmp', 'svg'];
-  
-  if (!validExtensions.includes(fileExtension)) {
+  const fileExtension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1];
+  const extensionTypes = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png'
+  };
+
+  if (fileExtension && !Object.hasOwn(extensionTypes, fileExtension)) {
     return false;
   }
 
-  // Read file header to verify actual content type
   const headerBytes = await readFileHeader(file);
   const mimeType = getMimeTypeFromHeader(headerBytes);
-  
-  return ALLOWED_MIME_TYPES.includes(mimeType);
+
+  return ALLOWED_MIME_TYPES.includes(mimeType) &&
+    (!file.type || file.type === mimeType) &&
+    (!fileExtension || extensionTypes[fileExtension] === mimeType);
 };
 
 const readFileHeader = (file) => {
@@ -62,12 +59,9 @@ const getMimeTypeFromHeader = (headerBytes) => {
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('').toUpperCase();
 
-  // Common image file signatures
   const signatures = {
     'FFD8FF': 'image/jpeg',
-    '89504E47': 'image/png',
-    '424D': 'image/bmp',
-    '3C3F786D': 'image/svg+xml'
+    '89504E47': 'image/png'
   };
 
   for (const [sig, mime] of Object.entries(signatures)) {
@@ -77,29 +71,6 @@ const getMimeTypeFromHeader = (headerBytes) => {
   }
   
   return 'unknown';
-};
-
-const validateSVG = async (file) => {
-  const content = await file.text();
-  
-  // Check for potentially malicious content in SVG
-  const dangerous = [
-    '<script',
-    'javascript:',
-    'data:',
-    'onload=',
-    'onerror=',
-    'onclick=',
-    'onmouseover=',
-    'eval(',
-    'Function(',
-  ];
-
-  if (dangerous.some(pattern => content.toLowerCase().includes(pattern))) {
-    throw new Error('SVG contains potentially malicious content');
-  }
-
-  return true;
 };
 
 export const validateImageUrl = (url) => {
@@ -125,6 +96,6 @@ export const validateImageUrl = (url) => {
 
     return true;
   } catch (error) {
-    throw new Error(error.message || 'Invalid URL format');
+    throw new Error(error.message || 'Invalid URL format', { cause: error });
   }
 };

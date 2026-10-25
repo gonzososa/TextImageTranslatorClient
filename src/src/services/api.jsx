@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { API_CONFIG } from '../config/apiConfig';
+import { MAX_FILE_SIZE } from '../utils/securityUtils';
 
 export const ApiService = {
   async processImage(formData) {
     return axios.post (API_CONFIG.OCR_ENDPOINT, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 30000,
-      maxContentLength: 5 * 1024 * 1024,
-      maxBodyLength: 5 * 1024 * 1024
+      maxContentLength: MAX_FILE_SIZE,
+      maxBodyLength: MAX_FILE_SIZE
     });
   },
 

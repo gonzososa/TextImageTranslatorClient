@@ -1,11 +1,9 @@
-import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import axios from 'axios';
+import React, { useCallback, useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { 
   Box, 
   Paper, 
   Select, 
   MenuItem, 
-  TextField, 
   Button, 
   Alert, 
   Snackbar,
@@ -16,34 +14,47 @@ import {
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { validateFile } from '../utils/securityUtils';
 import { ApiService } from '../services/api';
+import { isPointInPolygon } from '../utils/geometry';
+
+const getSourceLanguageLabel = (languageCode) => {
+  if (!languageCode) return 'Unknown';
+  if (languageCode === 'Mixed') return 'Mixed';
+
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(languageCode) || 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+};
 
 const ImageProcessingSection = forwardRef((props, ref) => {
   const canvasRef = useRef(null);
-  const [translatedText, setTranslatedText] = useState('');
+  const translationInProgressRef = useRef(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [toast, setToast] = useState({ show: false, message: '', type: 'danger' });
   const [lastOcrResult, setLastOcrResult] = useState(null);
   const [lastImageMetadata, setLastImageMetadata] = useState(null);
+  const [sourceLanguage, setSourceLanguage] = useState(null);
+  const [hasCurrentImage, setHasCurrentImage] = useState(false);
+  const [translationLines, setTranslationLines] = useState([]);
+  const [hoveredTranslation, setHoveredTranslation] = useState(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationFailed, setTranslationFailed] = useState(false);
   const canvasWidth = window.innerWidth * 0.75;
   const canvasHeight = 900;
 
   useEffect(() => {
     if (toast.show) {
       const timer = setTimeout(() => {
-        setToast({ ...toast, show: false });
+        setToast(currentToast => ({ ...currentToast, show: false }));
       }, 5000);
       return () => clearTimeout(timer);
     }
   }, [toast.show]);
 
-  useEffect(() => {
-    if (lastOcrResult && lastImageMetadata) {
-      handleTranslation(lastOcrResult, lastImageMetadata);
-    }
-  }, [selectedLanguage]);
-
   useImperativeHandle(ref, () => ({
-    processImage: (file) => handleImageUpload({ target: { files: [file] } }),
+    processImage: (file) => handleImageFile(file),
     showToast: (toastConfig) => setToast(toastConfig)
   }));
 
@@ -97,41 +108,109 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     });
   };
 
-  const handleTranslation = async (ocrResult, imageMetadata) => {
+  const handleTranslation = useCallback(async (ocrResult, targetLanguage) => {
+    if (translationInProgressRef.current) return;
+
+    translationInProgressRef.current = true;
+    setIsTranslating(true);
+    setTranslationFailed(false);
+    setTranslationLines([]);
+    setHoveredTranslation(null);
+
     try {
       setToast({ show: true, message: 'Translating text...', type: 'info' });
       const textChunks = ocrResult.recognizedText.map(item => item.text);
-
-      const translationResponse = await ApiService.translateText (
-      {
-        textChunks: textChunks,
-        targetLanguage: selectedLanguage
+      const translationResponse = await ApiService.translateText({
+        textChunks,
+        targetLanguage
       });
+      const translations = translationResponse.data.translations;
 
-      if (translationResponse.data.translations) {
-        const translatedTexts = translationResponse.data.translations
-          .map(t => t.translatedText)
-          .join('\n');
-        setTranslatedText(translatedTexts);
-        setToast({ show: true, message: 'Translation completed successfully!', type: 'success' });
+      if (!Array.isArray(translations) || translations.length !== textChunks.length) {
+        throw new Error('Translation response did not match recognized text.');
       }
+
+      setTranslationLines(ocrResult.recognizedText.map((recognizedText, index) => ({
+        polygon: recognizedText.polygon,
+        translatedText: translations[index].translatedText
+      })));
+      setToast({ show: true, message: 'Translation completed successfully!', type: 'success' });
     } catch (error) {
       console.error('Error translating text:', error);
-      setTranslatedText('');
+      setTranslationLines([]);
+      setHoveredTranslation(null);
+      setTranslationFailed(true);
       setToast({ 
         show: true, 
         message: 'Error: ' + (error.response?.data?.message || 'Failed to translate the text'),
         type: 'danger'
       });
+    } finally {
+      translationInProgressRef.current = false;
+      setIsTranslating(false);
+    }
+  }, []);
+
+  const handleLanguageChange = (event) => {
+    const targetLanguage = event.target.value;
+    setSelectedLanguage(targetLanguage);
+    if (lastOcrResult) {
+      handleTranslation(lastOcrResult, targetLanguage);
     }
   };
 
-  const handleImageUpload = async (event) => {
-    const file = event.target.files[0];
+  const handleCanvasMouseMove = (event) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !lastImageMetadata || translationLines.length === 0) {
+      return;
+    }
+
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) {
+      return;
+    }
+
+    const canvasX = (event.clientX - bounds.left) * canvas.width / bounds.width;
+    const canvasY = (event.clientY - bounds.top) * canvas.height / bounds.height;
+    const imagePoint = {
+      x: (canvasX - lastImageMetadata.offsetX) / lastImageMetadata.scale,
+      y: (canvasY - lastImageMetadata.offsetY) / lastImageMetadata.scale
+    };
+    const match = translationLines.find(line =>
+      line.translatedText && isPointInPolygon(imagePoint, line.polygon)
+    );
+
+    if (!match) {
+      setHoveredTranslation(null);
+      return;
+    }
+
+    const center = match.polygon.reduce(
+      (result, point) => ({ x: result.x + point.x / match.polygon.length, y: result.y + point.y / match.polygon.length }),
+      { x: 0, y: 0 }
+    );
+    const tooltipCanvasX = center.x * lastImageMetadata.scale + lastImageMetadata.offsetX;
+    const tooltipCanvasY = center.y * lastImageMetadata.scale + lastImageMetadata.offsetY;
+
+    setHoveredTranslation({
+      text: match.translatedText,
+      left: tooltipCanvasX / canvas.width * 100,
+      top: tooltipCanvasY / canvas.height * 100
+    });
+  };
+
+  const handleImageFile = async (file) => {
     if (!file) return;
 
     try {
       await validateFile(file);
+      setTranslationLines([]);
+      setHoveredTranslation(null);
+      setLastOcrResult(null);
+      setLastImageMetadata(null);
+      setSourceLanguage(null);
+      setHasCurrentImage(false);
+      setTranslationFailed(false);
       
       const image = new Image();
       const reader = new FileReader();
@@ -140,6 +219,8 @@ const ImageProcessingSection = forwardRef((props, ref) => {
         image.src = e.target.result;
         image.onload = async () => {
           const imageMetadata = drawImageOnCanvas(image);
+          setHasCurrentImage(true);
+          setLastImageMetadata(imageMetadata);
           
           const formData = new FormData();
           formData.append('file', file);
@@ -147,20 +228,23 @@ const ImageProcessingSection = forwardRef((props, ref) => {
           try {
             setToast({ show: true, message: 'Processing image...', type: 'info' });
             const ocrResponse = await ApiService.processImage(formData);
-            
-            if (ocrResponse.data.recognizedText) {
-              drawTextBoxes(ocrResponse.data.recognizedText, imageMetadata);
-              
+
+            if (Array.isArray(ocrResponse.data.recognizedText) && ocrResponse.data.recognizedText.length > 0) {
+              const { recognizedText } = ocrResponse.data;
+              drawTextBoxes(recognizedText, imageMetadata);
               setLastOcrResult(ocrResponse.data);
-              setLastImageMetadata(imageMetadata);
-              
-              await handleTranslation(ocrResponse.data, imageMetadata);
+              setSourceLanguage(ocrResponse.data.sourceLanguage || null);
+              await handleTranslation(ocrResponse.data, selectedLanguage);
             } else {
+              setLastOcrResult(null);
+              setLastImageMetadata(null);
+              setSourceLanguage(null);
               setToast({ show: true, message: 'No text was found in the image', type: 'warning' });
             }
           } catch (error) {
             console.error('Error processing image:', error);
-            setTranslatedText('');
+            setTranslationLines([]);
+            setHoveredTranslation(null);
             setLastOcrResult(null);
             setLastImageMetadata(null);
             setToast({ 
@@ -198,17 +282,43 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     }
   };
 
+  const handleImageUpload = (event) => handleImageFile(event.target.files?.[0]);
+
+  const handleDragEnter = (event) => {
+    event.preventDefault();
+    setIsDraggingFile(true);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleFileDrop = (event) => {
+    event.preventDefault();
+    setIsDraggingFile(false);
+    return handleImageFile(event.dataTransfer.files?.[0]);
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {}
       <Snackbar
         open={toast.show}
         autoHideDuration={5000}
-        onClose={() => setToast({ ...toast, show: false })}
+        onClose={() => setToast(currentToast => ({ ...currentToast, show: false }))}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert 
-          onClose={() => setToast({ ...toast, show: false })} 
+          onClose={() => setToast(currentToast => ({ ...currentToast, show: false }))} 
           severity={toast.type === 'success' ? 'success' : 
                    toast.type === 'info' ? 'info' : 
                    toast.type === 'warning' ? 'warning' : 'error'}
@@ -229,17 +339,53 @@ const ImageProcessingSection = forwardRef((props, ref) => {
             background: '#ffffff',
           }}
         >
-          <canvas
-            ref={canvasRef}
-            width={canvasWidth}
-            height={canvasHeight}
-            style={{
-              width: '100%',
-              height: 'auto',
-              borderRadius: '8px',
-              backgroundColor: '#f8f9fa'
-            }}
-          />
+          <Box sx={{ position: 'relative', lineHeight: 0 }}>
+            {hasCurrentImage && (
+              <Typography
+                aria-label="Detected source language"
+                variant="subtitle1"
+                sx={{ mb: 1, lineHeight: 1.5 }}
+              >
+                Source language: {getSourceLanguageLabel(sourceLanguage)}
+              </Typography>
+            )}
+            <canvas
+              ref={canvasRef}
+              width={canvasWidth}
+              height={canvasHeight}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseLeave={() => setHoveredTranslation(null)}
+              style={{
+                width: '100%',
+                height: 'auto',
+                borderRadius: '8px',
+                backgroundColor: '#f8f9fa'
+              }}
+            />
+            {hoveredTranslation && (
+              <Paper
+                role="tooltip"
+                sx={{
+                  position: 'absolute',
+                  left: `${hoveredTranslation.left}%`,
+                  top: `${hoveredTranslation.top}%`,
+                  transform: 'translate(-50%, calc(-100% - 8px))',
+                  maxWidth: '80%',
+                  px: 1.5,
+                  py: 1,
+                  lineHeight: 1.4,
+                  backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                  color: 'text.primary',
+                  border: '1px solid',
+                  borderColor: 'primary.main',
+                  pointerEvents: 'none',
+                  zIndex: 1
+                }}
+              >
+                {hoveredTranslation.text}
+              </Paper>
+            )}
+          </Box>
         </Paper>
 
         <Paper 
@@ -260,7 +406,8 @@ const ImageProcessingSection = forwardRef((props, ref) => {
               labelId="language-select-label"
               value={selectedLanguage}
               label="Target Language"
-              onChange={(e) => setSelectedLanguage(e.target.value)}
+              onChange={handleLanguageChange}
+              disabled={isTranslating}
               sx={{ mb: 2 }}
             >
               <MenuItem value="en">English</MenuItem>
@@ -269,43 +416,63 @@ const ImageProcessingSection = forwardRef((props, ref) => {
             </Select>
           </FormControl>
 
-          <TextField
-            multiline
-            rows={8}
-            value={translatedText}
-            disabled
-            label="Translated Text"
-            sx={{
-              backgroundColor: '#f8f9fa',
-              '& .MuiInputBase-input.Mui-disabled': {
-                WebkitTextFillColor: '#000000',
-                opacity: 0.7,
-              }
-            }}
-          />
+          <Typography variant="body2" color="text.secondary">
+            Hover over an outlined text region to see its translation.
+          </Typography>
 
-          <Button
-            variant="contained"
-            component="label"
-            startIcon={<CloudUploadIcon />}
+          {lastOcrResult?.recognizedText?.length > 0 && (
+            <Button
+              variant="outlined"
+              onClick={() => handleTranslation(lastOcrResult, selectedLanguage)}
+              disabled={isTranslating}
+            >
+              {isTranslating ? 'Translating...' : translationFailed ? 'Retry translation' : 'Translate again'}
+            </Button>
+          )}
+
+          <Box
+            role="region"
+            aria-label="Image upload drop area"
             sx={{
               mt: 2,
-              background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #1976D2 30%, #1CA7F3 90%)',
-              }
+              p: 2,
+              border: '2px dashed',
+              borderColor: isDraggingFile ? 'primary.main' : 'divider',
+              borderRadius: 2,
+              textAlign: 'center',
+              backgroundColor: isDraggingFile ? 'action.hover' : 'transparent',
+              transition: 'background-color 150ms ease, border-color 150ms ease'
             }}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleFileDrop}
           >
-            Submit Image
-            <input
-              type="file"
-              hidden
-              accept=".jpeg,.jpg,.png,.bmp,.svg"
-              onChange={handleImageUpload}
-            />
-          </Button>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {isDraggingFile ? 'Drop image to upload' : 'Drag and drop a JPEG or PNG image here, or'}
+            </Typography>
+            <Button
+              variant="contained"
+              component="label"
+              startIcon={<CloudUploadIcon />}
+              sx={{
+                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #1976D2 30%, #1CA7F3 90%)',
+                }
+              }}
+            >
+              Submit Image
+              <input
+                type="file"
+                hidden
+                accept=".jpeg,.jpg,.png"
+                onChange={handleImageUpload}
+              />
+            </Button>
+          </Box>
         </Paper>
       </Box>
     </Box>
