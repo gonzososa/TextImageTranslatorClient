@@ -124,6 +124,47 @@ describe('ImageProcessingSection', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
+  it('keeps the canvas bitmap size when the window is resized and the component re-renders', async () => {
+    const user = userEvent.setup();
+    serviceMocks.processImage.mockResolvedValue({
+      data: {
+        recognizedText: [
+          {
+            text: 'Hello',
+            polygon: [
+              { x: 0, y: 0 },
+              { x: 20, y: 0 },
+              { x: 20, y: 20 },
+              { x: 0, y: 20 }
+            ]
+          }
+        ]
+      }
+    });
+    serviceMocks.translateText.mockResolvedValue({
+      data: { translations: [{ translatedText: 'Hello translated' }] }
+    });
+    const { container } = render(<ImageProcessingSection />);
+    const file = new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xe0])], 'sample.jpg', { type: 'image/jpeg' });
+
+    await user.upload(container.querySelector('input[type="file"]'), file);
+    await waitFor(() => expect(serviceMocks.translateText).toHaveBeenCalled());
+
+    const canvas = container.querySelector('canvas');
+    const initialWidth = canvas.width;
+    const originalInnerWidth = window.innerWidth;
+
+    try {
+      window.innerWidth = originalInnerWidth / 2;
+      fireEvent(window, new Event('resize'));
+      fireEvent.mouseMove(canvas, {       clientX: 50, clientY: 100 });
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Hello translated');
+      expect(canvas.width).toBe(initialWidth);
+    } finally {
+      window.innerWidth = originalInnerWidth;
+    }
+  });
+
   it('retranslates the current OCR result when the target language changes', async () => {
     const user = userEvent.setup();
     serviceMocks.processImage.mockResolvedValue({
@@ -417,6 +458,77 @@ describe('ImageProcessingSection', () => {
     expect(serviceMocks.processImage.mock.calls[0][0].get('file')).toBe(file);
     expect(screen.getByText('Drag and drop a JPEG or PNG image here, or')).toBeInTheDocument();
     expect(container.querySelector('input[type="file"]')).toHaveAttribute('accept', '.jpeg,.jpg,.png');
+  });
+
+  describe('clipboard paste', () => {
+    const pasteEvent = (target, items) => {
+      const event = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: { items } });
+      target.dispatchEvent(event);
+      return event;
+    };
+    const imageItem = (file) => ({ kind: 'file', type: file.type, getAsFile: () => file });
+
+    it('processes a pasted image through the same flow and names unnamed images', async () => {
+      serviceMocks.processImage.mockResolvedValue({ data: { recognizedText: [] } });
+      render(<ImageProcessingSection />);
+      const file = new File([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], '', { type: 'image/png' });
+
+      const event = pasteEvent(document.body, [imageItem(file)]);
+
+      expect(event.defaultPrevented).toBe(true);
+      await waitFor(() => expect(serviceMocks.processImage).toHaveBeenCalledOnce());
+      const sent = serviceMocks.processImage.mock.calls[0][0].get('file');
+      expect(sent.name).toBe('pasted-image.png');
+      expect(sent.type).toBe('image/png');
+      expect(serviceMocks.validateFile).toHaveBeenCalledOnce();
+    });
+
+    it('ignores pasted text', () => {
+      render(<ImageProcessingSection />);
+
+      const event = pasteEvent(document.body, [{ kind: 'string', type: 'text/plain', getAsFile: () => null }]);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(serviceMocks.validateFile).not.toHaveBeenCalled();
+    });
+
+    it('ignores pastes made inside a text input', () => {
+      render(
+        <>
+          <input aria-label="url" />
+          <ImageProcessingSection />
+        </>
+      );
+      const file = new File(['x'], 'a.png', { type: 'image/png' });
+
+      const event = pasteEvent(screen.getByLabelText('url'), [imageItem(file)]);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(serviceMocks.validateFile).not.toHaveBeenCalled();
+    });
+
+    it('shows the validation error for an unsupported pasted image', async () => {
+      serviceMocks.validateFile.mockRejectedValue(new Error('Invalid file type'));
+      render(<ImageProcessingSection />);
+      const file = new File(['x'], 'a.gif', { type: 'image/gif' });
+
+      pasteEvent(document.body, [imageItem(file)]);
+
+      expect(await screen.findByText(/Invalid file type/)).toBeInTheDocument();
+      expect(serviceMocks.processImage).not.toHaveBeenCalled();
+    });
+
+    it('removes the paste listener on unmount', () => {
+      const { unmount } = render(<ImageProcessingSection />);
+      unmount();
+      const file = new File(['x'], 'a.png', { type: 'image/png' });
+
+      const event = pasteEvent(document.body, [imageItem(file)]);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(serviceMocks.validateFile).not.toHaveBeenCalled();
+    });
   });
 
   it('does not process files dropped outside the upload area', () => {

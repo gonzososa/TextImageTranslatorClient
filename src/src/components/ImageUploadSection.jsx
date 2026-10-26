@@ -29,16 +29,18 @@ const ImageUploadSection = ({ onTranslateFromUrl }) => {
   return (
     <Box sx={{ p: 3, maxWidth: '800px', mx: 'auto' }}>
       <Paper
-        elevation={3}
+        elevation={0}
         sx={{
           p: '2px 4px',
           display: 'flex',
           alignItems: 'center',
           width: '100%',
           borderRadius: '50px',
-          background: '#f8f9fa',
-          '&:hover': {
-            boxShadow: '0 4px 20px 0 rgba(0,0,0,0.12)',
+          backgroundColor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          '&:hover, &:focus-within': {
+            borderColor: 'primary.main',
           }
         }}
       >
@@ -59,10 +61,10 @@ const ImageUploadSection = ({ onTranslateFromUrl }) => {
         <IconButton 
           sx={{ 
             p: '10px',
-            bgcolor: imageUrl ? '#2196F3' : 'grey.300',
-            color: 'white',
+            bgcolor: imageUrl ? 'primary.main' : 'action.disabledBackground',
+            color: 'primary.contrastText',
             '&:hover': {
-              bgcolor: imageUrl ? '#1976D2' : 'grey.400'
+              bgcolor: imageUrl ? 'primary.dark' : 'action.disabledBackground'
             },
             transition: 'all 0.3s'
           }} 

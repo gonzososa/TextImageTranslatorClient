@@ -10,10 +10,9 @@ const Footer = () => {
         py: 3,
         px: 2,
         mt: 'auto',
-        backgroundColor: (theme) =>
-          theme.palette.mode === 'light'
-            ? theme.palette.grey[100]
-            : theme.palette.grey[900],
+        backgroundColor: 'background.paper',
+        borderTop: '1px solid',
+        borderColor: 'divider',
       }}
     >
       <Container maxWidth="sm">
@@ -29,7 +28,7 @@ const Footer = () => {
           }}
         >
           © {new Date().getFullYear()} - Made with
-          <FavoriteIcon sx={{ fontSize: 16, color: '#FF1744' }} />
+          <FavoriteIcon sx={{ fontSize: 16, color: 'error.main' }} />
           under the MIT License
         </Typography>
       </Container>

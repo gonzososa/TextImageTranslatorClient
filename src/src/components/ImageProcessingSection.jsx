@@ -15,6 +15,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { validateFile } from '../utils/securityUtils';
 import { ApiService } from '../services/api';
 import { isPointInPolygon } from '../utils/geometry';
+import { OCR_OUTLINE_COLOR } from '../theme';
 
 const getSourceLanguageLabel = (languageCode) => {
   if (!languageCode) return 'Unknown';
@@ -41,7 +42,8 @@ const ImageProcessingSection = forwardRef((props, ref) => {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationFailed, setTranslationFailed] = useState(false);
-  const canvasWidth = window.innerWidth * 0.75;
+  // Fixed bitmap size: changing the canvas width attribute on re-render clears the drawing.
+  const [canvasWidth] = useState(() => window.innerWidth * 0.75);
   const canvasHeight = 900;
 
   useEffect(() => {
@@ -81,7 +83,7 @@ const ImageProcessingSection = forwardRef((props, ref) => {
     const ctx = canvas.getContext('2d');
     
     // Set rectangle style
-    ctx.strokeStyle = 'red';
+    ctx.strokeStyle = OCR_OUTLINE_COLOR;
     ctx.lineWidth = 2;
 
     recognizedText.forEach(({ polygon }) => {
@@ -284,6 +286,33 @@ const ImageProcessingSection = forwardRef((props, ref) => {
 
   const handleImageUpload = (event) => handleImageFile(event.target.files?.[0]);
 
+  const handleImageFileRef = useRef(handleImageFile);
+  useEffect(() => {
+    handleImageFileRef.current = handleImageFile;
+  });
+
+  useEffect(() => {
+    const handlePaste = (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, textarea, [contenteditable="true"]')) return;
+
+      const items = Array.from(event.clipboardData?.items ?? []);
+      const imageItem = items.find(item => item.kind === 'file' && item.type.startsWith('image/'));
+      const file = imageItem?.getAsFile();
+      if (!file) return;
+
+      event.preventDefault();
+      const extension = file.type.split('/')[1]?.split('+')[0] || 'png';
+      const namedFile = file.name
+        ? file
+        : new File([file], `pasted-image.${extension}`, { type: file.type });
+      handleImageFileRef.current(namedFile);
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, []);
+
   const handleDragEnter = (event) => {
     event.preventDefault();
     setIsDraggingFile(true);
@@ -330,13 +359,13 @@ const ImageProcessingSection = forwardRef((props, ref) => {
 
       <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
         <Paper 
-          elevation={3} 
+          elevation={0} 
           sx={{ 
             flex: '1 1 70%',
             minWidth: '300px',
             p: 2,
-            borderRadius: 2,
-            background: '#ffffff',
+            border: '1px solid',
+            borderColor: 'divider',
           }}
         >
           <Box sx={{ position: 'relative', lineHeight: 0 }}>
@@ -359,7 +388,7 @@ const ImageProcessingSection = forwardRef((props, ref) => {
                 width: '100%',
                 height: 'auto',
                 borderRadius: '8px',
-                backgroundColor: '#f8f9fa'
+                backgroundColor: '#F5F7FB'
               }}
             />
             {hoveredTranslation && (
@@ -374,10 +403,11 @@ const ImageProcessingSection = forwardRef((props, ref) => {
                   px: 1.5,
                   py: 1,
                   lineHeight: 1.4,
-                  backgroundColor: 'rgba(255, 255, 255, 0.96)',
+                  backgroundColor: 'background.paper',
                   color: 'text.primary',
                   border: '1px solid',
                   borderColor: 'primary.main',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
                   pointerEvents: 'none',
                   zIndex: 1
                 }}
@@ -389,12 +419,13 @@ const ImageProcessingSection = forwardRef((props, ref) => {
         </Paper>
 
         <Paper 
-          elevation={3} 
+          elevation={0} 
           sx={{ 
             flex: '1 1 25%',
             minWidth: '250px',
             p: 3,
-            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
             display: 'flex',
             flexDirection: 'column',
             gap: 2
@@ -451,18 +482,13 @@ const ImageProcessingSection = forwardRef((props, ref) => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               {isDraggingFile ? 'Drop image to upload' : 'Drag and drop a JPEG or PNG image here, or'}
             </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              You can also paste an image with Ctrl+V.
+            </Typography>
             <Button
               variant="contained"
               component="label"
               startIcon={<CloudUploadIcon />}
-              sx={{
-                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-                color: 'white',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #1976D2 30%, #1CA7F3 90%)',
-                }
-              }}
             >
               Submit Image
               <input

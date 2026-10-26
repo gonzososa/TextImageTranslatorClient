@@ -37,8 +37,9 @@ const Header = () => {
     <AppBar 
       position="static" 
       sx={{ 
-        background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-        boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)'
+        backgroundColor: 'primary.main',
+        borderBottom: '1px solid',
+        borderColor: 'primary.dark'
       }}
     >
       <Toolbar>
@@ -104,7 +105,7 @@ const Header = () => {
                       py: 1,
                       borderRadius: 0,
                       '&:hover': {
-                        backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                        backgroundColor: 'action.hover',
                       },
                     },
                   },
